@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Video Player</title>
+    <style>
+      video {
+        width: 100%;
+        height: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <video id="player" controls>
+      <source src="" type="video/mp4" />
+    </video>
+
+    <script>
+      function calculateDownloadSpeed(url, callback) {
+        const startTime = performance.now();
+        let receivedBytes = 0;
+
+        fetch(url)
+          .then((response) => {
+            const reader = response.body.getReader();
+            return new ReadableStream({
+              start(controller) {
+                function pump() {
+                  reader.read().then(({ done, value }) => {
+                    const endTime = performance.now();
+                    const duration = (endTime - startTime) / 1000;
+                    if (done || duration > 4) {
+                      const bytesTotal = receivedBytes * 8;
+                      const mega = duration * 1024 * 1024;
+                      const mbps = bytesTotal / mega;
+                      callback(mbps);
+                      return;
+                    }
+                    receivedBytes += value.length;
+                    controller.enqueue(value);
+                    pump();
+                  });
+                }
+                pump();
+              },
+            });
+          })
+          .catch((error) => {
+            console.error("Error fetching video:", error);
+            callback(null);
+          });
+      }
+
+      window.addEventListener("DOMContentLoaded", async () => {
+        const player = document.getElementById("player");
+        calculateDownloadSpeed("/speed", (speed) => {
+          fetch("/video", { headers: { "X-Connection-Speed": speed } })
+            .then((response) => response.blob())
+            .then((blob) => (player.src = URL.createObjectURL(blob)))
+            .catch((error) => console.error("Error fetching video:", error));
+        });
+      });
+    </script>
+  </body>
+</html>
